@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PS1 Web Emulátor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a2e;
+            color: #eaeaea;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            color: #0f3460;
+            margin-bottom: 30px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #16213e;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .file-input {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .file-input label {
+            background-color: #0f3460;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .file-input input[type="file"] {
+            display: none;
+        }
+        .file-input span {
+            color: #a0a0a0;
+            font-size: 0.9em;
+        }
+        #romFileName, #biosFileName {
+            color: #e94560;
+            font-weight: bold;
+        }
+        #emulatorFrame {
+            width: 100%;
+            height: 600px;
+            border: none;
+            border-radius: 5px;
+            background-color: #000;
+        }
+        .instructions {
+            background-color: #0f3460;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            text-align: left;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #e94560;
+        }
+        .instructions ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin-bottom: 5px;
+        }
+        button {
+            background-color: #e94560;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #ff6b81;
+        }
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        .success {
+            background-color: #2ecc71;
+            color: white;
+        }
+        .error {
+            background-color: #e74c3c;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 PS1 Web Emulátor</h1>
+        
+        <div class="instructions">
+            <h3>Használati útmutató:</h3>
+            <ul>
+                <li>Töltsd fel a <strong>PS1 BIOS</strong> fájlt (pl. <code>SCPH1001.BIN</code>).</li>
+                <li>Töltsd fel a <strong>PS1 ROM</strong>-ot (ISO, BIN+CUE, vagy CHD formátum).</li>
+                <li>Kattints a <strong>Játék indítása</strong> gombra.</li>
+                <li>A játék a böngészőben fog futni (WASM emuláció).</li>
+                <li>Használd a <strong>nyíl billentyűket</strong> és a <strong>gombokat</strong> (X, O, □, Δ) a vezérléshez.</li>
+            </ul>
+            <p><strong>Figyelem:</strong> A BIOS fájlt <strong>te magadnak kell beszerezned</strong> (jogosultságok miatt nem lehet előre feltölteni).</p>
+        </div>
+
+        <div class="controls">
+            <div class="file-input">
+                <label for="biosFile">BIOS fájl feltöltése</label>
+                <input type="file" id="biosFile" accept=".bin">
+                <span>Fájl: <span id="biosFileName">Nincs kiválasztva</span></span>
+            </div>
+            
+            <div class="file-input">
+                <label for="romFile">ROM fájl feltöltése</label>
+                <input type="file" id="romFile" accept=".iso,.bin,.cue,.chd">
+                <span>Fájl: <span id="romFileName">Nincs kiválasztva</span></span>
+            </div>
+            
+            <button id="startButton" disabled>Játék indítása</button>
+        </div>
+
+        <div id="status" class="status"></div>
+
+        <iframe id="emulatorFrame" src="PlayStation.htm" allowfullscreen></iframe>
+    </div>
+
+    <script>
+        const biosFileInput = document.getElementById('biosFile');
+        const romFileInput = document.getElementById('romFile');
+        const biosFileName = document.getElementById('biosFileName');
+        const romFileName = document.getElementById('romFileName');
+        const startButton = document.getElementById('startButton');
+        const statusDiv = document.getElementById('status');
+        const emulatorFrame = document.getElementById('emulatorFrame');
+
+        let biosFile = null;
+        let romFile = null;
+
+        // BIOS fájl kiválasztása
+        biosFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                biosFile = e.target.files[0];
+                biosFileName.textContent = biosFile.name;
+                checkFilesReady();
+            } else {
+                biosFile = null;
+                biosFileName.textContent = 'Nincs kiválasztva';
+                checkFilesReady();
+            }
+        });
+
+        // ROM fájl kiválasztása
+        romFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                romFile = e.target.files[0];
+                romFileName.textContent = romFile.name;
+                checkFilesReady();
+            } else {
+                romFile = null;
+                romFileName.textContent = 'Nincs kiválasztva';
+                checkFilesReady();
+            }
+        });
+
+        // Ellenőrizzük, hogy mindkét fájl kiválasztva van-e
+        function checkFilesReady() {
+            if (biosFile && romFile) {
+                startButton.disabled = false;
+            } else {
+                startButton.disabled = true;
+            }
+        }
+
+        // Játék indítása
+        startButton.addEventListener('click', () => {
+            statusDiv.style.display = 'none';
+            
+            // Várunk, amíg az iframe betöltődik
+            emulatorFrame.onload = function() {
+                try {
+                    // Az emulátor betöltődött, most töltjük fel a fájlokat
+                    const frameDoc = emulatorFrame.contentDocument || emulatorFrame.contentWindow.document;
+                    
+                    // Keressük meg a file input-okat az emulátorban
+                    const biosInput = frameDoc.getElementById('bios_input') || 
+                                     frameDoc.querySelector('input[type="file"]');
+                    const romInput = frameDoc.getElementById('rom_input') || 
+                                   frameDoc.querySelectorAll('input[type="file"]')[1];
+
+                    if (biosInput && romInput) {
+                        // Létrehozunk egy DataTransfer objektumot
+                        const biosDataTransfer = new DataTransfer();
+                        biosDataTransfer.items.add(biosFile);
+                        biosInput.files = biosDataTransfer.files;
+
+                        const romDataTransfer = new DataTransfer();
+                        romDataTransfer.items.add(romFile);
+                        romInput.files = romDataTransfer.files;
+
+                        // Kiváltjuk a változás eseményt
+                        const biosEvent = new Event('change', { bubbles: true });
+                        const romEvent = new Event('change', { bubbles: true });
+                        biosInput.dispatchEvent(biosEvent);
+                        romInput.dispatchEvent(romEvent);
+
+                        showStatus('A játék betöltése folyamatban...', 'success');
+                    } else {
+                        showStatus('Nem találtam file input-okat az emulátorban. Próbáld meg manuálisan feltölteni.', 'error');
+                    }
+                } catch (error) {
+                    console.error('Hiba az emulátor indítása közben:', error);
+                    showStatus('Hiba történt: ' + error.message, 'error');
+                }
+            };
+
+            // Újratöltjük az iframe-t, hogy biztosan betöltődjön
+            emulatorFrame.src = emulatorFrame.src;
+        });
+
+        // Üzenet megjelenítése
+        function showStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+            statusDiv.style.display = 'block';
+            
+            // 5 másodperc múlva eltűnik
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Figyeljük az iframe betöltődését
+        emulatorFrame.addEventListener('load', () => {
+            console.log('Emulátor betöltődött');
+        });
+    </script>
+</body>
+</html>
